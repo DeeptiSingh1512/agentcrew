@@ -178,3 +178,19 @@ def run(goal: str):
             "trace": [],
         }
     )
+def stream_run(goal: str):
+    """Yield (agent_name, state_update) as each agent finishes."""
+    graph = build_graph()
+    initial = {
+        "goal": goal,
+        "plan": [],
+        "evidence": [],
+        "report": "",
+        "issues": [],
+        "approved": False,
+        "drafts": 0,
+        "trace": [],
+    }
+    for update in graph.stream(initial, stream_mode="updates"):
+        for node, delta in update.items():
+            yield node, delta    
