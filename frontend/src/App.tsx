@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import "./App.css";
@@ -8,6 +8,13 @@ const API = "http://localhost:8000";
 type Step = { agent: string; message: string };
 type Evidence = { label: string; text: string; score?: number; url?: string };
 type PlanItem = { q: string; source: "docs" | "web" };
+type HistoryItem = {
+  id: string;
+  goal: string;
+  approved: boolean | null;
+  drafts: number | null;
+  created_at: string;
+};
 
 const ICONS: Record<string, string> = {
   planner: "🧭",
@@ -17,6 +24,11 @@ const ICONS: Record<string, string> = {
   writer: "✍️",
   critic: "🧐",
 };
+
+function fmt(s: string) {
+  const iso = /(Z|[+-]\d\d:\d\d)$/.test(s) ? s : s + "Z";
+  return new Date(iso).toLocaleString();
+}
 
 export default function App() {
   const [uploadMsg, setUploadMsg] = useState("");
@@ -28,6 +40,22 @@ export default function App() {
   const [evidence, setEvidence] = useState<Evidence[]>([]);
   const [status, setStatus] = useState("");
   const [running, setRunning] = useState(false);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+
+  async function loadHistory() {
+    try {
+      const res = await fetch(`${API}/history`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setHistory(data.runs ?? []);
+    } catch {
+      /* history is optional; ignore errors */
+    }
+  }
+
+  useEffect(() => {
+    loadHistory();
+  }, []);
 
   async function upload(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -124,6 +152,7 @@ export default function App() {
             setStatus(
               `${ev.approved ? "Approved by critic" : "Not approved"} after ${ev.drafts} draft(s)`
             );
+            loadHistory();
           } else if (ev.type === "error") {
             setStatus(`Error: ${ev.message}`);
           }
@@ -133,6 +162,31 @@ export default function App() {
       setStatus("Connection failed. Is the server running?");
     } finally {
       setRunning(false);
+    }
+  }
+
+  async function openRun(id: string) {
+    resetResults();
+    setPlan(null);
+    try {
+      const res = await fetch(`${API}/history/${id}`);
+      const data = await res.json();
+      if (!res.ok) {
+        setStatus(`Error: ${JSON.stringify(data.detail)}`);
+        return;
+      }
+      setGoal(data.goal ?? "");
+      setSteps(data.trace ?? []);
+      setReport(data.report ?? "");
+      setEvidence(data.evidence ?? []);
+      setStatus(
+        `Saved run from ${fmt(data.created_at)}: ${
+          data.approved ? "approved by critic" : "not approved"
+        } after ${data.drafts ?? 0} draft(s)`
+      );
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch {
+      setStatus("Could not load that run.");
     }
   }
 
@@ -248,6 +302,25 @@ export default function App() {
               )}
               <p className="snippet">{e.text}</p>
             </details>
+          ))}
+        </section>
+      )}
+
+      {history.length > 0 && (
+        <section className="card">
+          <h2>Past runs</h2>
+          {history.map((h) => (
+            <button
+              key={h.id}
+              className="history-item"
+              disabled={running}
+              onClick={() => openRun(h.id)}
+            >
+              <span className="h-goal">{h.goal}</span>
+              <span className="h-meta">
+                {fmt(h.created_at)} · {h.approved ? "approved" : "not approved"}
+              </span>
+            </button>
           ))}
         </section>
       )}

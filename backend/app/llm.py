@@ -8,7 +8,14 @@ from app.config import GEMINI_API_KEY, GEMINI_MODEL
 _client = None
 
 # Primary model first, then fallbacks (names from your models list)
-FALLBACK_MODELS = ["gemini-flash-latest", "gemini-3.5-flash", "gemini-3.1-flash-lite"]
+FALLBACK_MODELS = [
+    "gemini-flash-latest",
+    "gemini-3.5-flash",
+    "gemini-3.6-flash",
+    "gemini-3.7-flash",
+    "gemini-3.1-flash-lite",
+    "gemini-3.5-flash-lite",
+]
 TRANSIENT = ("503", "429", "500", "UNAVAILABLE", "RESOURCE_EXHAUSTED", "overloaded")
 
 # Guardrail: maximum model calls in one crew run
@@ -37,22 +44,25 @@ def _spend():
             )
 
 
-def generate(prompt: str, attempts_per_model: int = 3) -> str:
+def generate(prompt: str, rounds: int = 2, attempts_per_model: int = 2) -> str:
     global _client
-    _spend()
+    _spend()  # counts once per logical call, not per retry
     if _client is None:
         _client = genai.Client(api_key=GEMINI_API_KEY)
 
     models = list(dict.fromkeys([GEMINI_MODEL, *FALLBACK_MODELS]))
     last = None
-    for model in models:
-        for i in range(attempts_per_model):
-            try:
-                resp = _client.models.generate_content(model=model, contents=prompt)
-                return resp.text
-            except Exception as e:
-                last = e
-                if not any(t in str(e) for t in TRANSIENT):
-                    break  # not a busy-server error (e.g. 404): try the next model
-                time.sleep(3 * 2**i)  # 3s, 6s, 12s
+    for r in range(rounds):
+        for model in models:
+            for i in range(attempts_per_model):
+                try:
+                    resp = _client.models.generate_content(model=model, contents=prompt)
+                    return resp.text
+                except Exception as e:
+                    last = e
+                    if not any(t in str(e) for t in TRANSIENT):
+                        break  # not a busy-server error: try the next model
+                    time.sleep(2 * (i + 1))
+        if r < rounds - 1:
+            time.sleep(20)  # everything was busy: wait, then try the whole list again
     raise RuntimeError(f"Gemini call failed on all models: {last}")

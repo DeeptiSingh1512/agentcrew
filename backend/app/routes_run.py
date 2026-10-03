@@ -6,6 +6,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.agents.graph import create_plan, stream_run
+from app.history import get_run, list_runs, save_run
 
 router = APIRouter()
 
@@ -35,6 +36,17 @@ def _events(goal: str, plan):
             final.update(delta)
             message = delta["trace"][-1]["message"] if delta.get("trace") else ""
             yield _sse({"type": "step", "agent": agent, "message": message})
+        run_id = save_run(
+            {
+                "goal": goal,
+                "plan": plan or final.get("plan", []),
+                "report": final.get("report", ""),
+                "approved": final.get("approved", False),
+                "drafts": final.get("drafts", 0),
+                "evidence": final.get("evidence", []),
+                "trace": final.get("trace", []),
+            }
+        )
         yield _sse(
             {
                 "type": "done",
@@ -42,6 +54,7 @@ def _events(goal: str, plan):
                 "approved": final.get("approved", False),
                 "drafts": final.get("drafts", 0),
                 "evidence": final.get("evidence", []),
+                "run_id": run_id,
             }
         )
     except Exception as e:
@@ -60,3 +73,22 @@ def make_plan(req: PlanRequest):
 def run_crew(req: RunRequest):
     plan = [p.model_dump() for p in req.plan] if req.plan else None
     return StreamingResponse(_events(req.goal, plan), media_type="text/event-stream")
+
+
+@router.get("/history")
+def history():
+    try:
+        return {"runs": list_runs()}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"History unavailable: {e}")
+
+
+@router.get("/history/{run_id}")
+def history_item(run_id: str):
+    try:
+        run = get_run(run_id)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"History unavailable: {e}")
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return run
