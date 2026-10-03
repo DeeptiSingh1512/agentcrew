@@ -5,3 +5,4 @@ pymupdf
 qdrant-client
 fastembed
 python-dotenv
+google-genai
