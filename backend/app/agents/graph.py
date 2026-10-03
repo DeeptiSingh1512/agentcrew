@@ -94,8 +94,8 @@ REPORT:
 """
 
 
-def planner(state: State):
-    raw = generate(PLAN_PROMPT.format(goal=state["goal"]))
+def create_plan(goal: str) -> list[dict]:
+    raw = generate(PLAN_PROMPT.format(goal=goal))
     try:
         match = re.search(r"\[.*\]", raw, re.S)
         items = json.loads(match.group(0))
@@ -111,7 +111,12 @@ def planner(state: State):
         if not plan:
             raise ValueError("empty plan")
     except Exception:
-        plan = [{"q": state["goal"], "source": "docs"}]
+        plan = [{"q": goal, "source": "docs"}]
+    return plan
+
+
+def planner(state: State):
+    plan = create_plan(state["goal"])
     summary = "; ".join(f"({p['source']}) {p['q']}" for p in plan)
     return {
         "plan": plan,
@@ -233,7 +238,11 @@ def build_graph():
     g.add_node("analyst", analyst)
     g.add_node("writer", writer)
     g.add_node("critic", critic)
-    g.add_edge(START, "planner")
+    g.add_conditional_edges(
+        START,
+        lambda s: "retriever" if s["plan"] else "planner",
+        {"retriever": "retriever", "planner": "planner"},
+    )
     g.add_edge("planner", "retriever")
     g.add_edge("retriever", "web_researcher")
     g.add_edge("web_researcher", "analyst")
@@ -243,10 +252,10 @@ def build_graph():
     return g.compile()
 
 
-def _initial(goal: str):
+def _initial(goal: str, plan=None):
     return {
         "goal": goal,
-        "plan": [],
+        "plan": plan or [],
         "evidence": [],
         "analysis": "",
         "report": "",
@@ -257,12 +266,12 @@ def _initial(goal: str):
     }
 
 
-def run(goal: str):
-    return build_graph().invoke(_initial(goal))
+def run(goal: str, plan=None):
+    return build_graph().invoke(_initial(goal, plan))
 
 
-def stream_run(goal: str):
+def stream_run(goal: str, plan=None):
     """Yield (agent_name, state_update) as each agent finishes."""
-    for update in build_graph().stream(_initial(goal), stream_mode="updates"):
+    for update in build_graph().stream(_initial(goal, plan), stream_mode="updates"):
         for node, delta in update.items():
             yield node, delta

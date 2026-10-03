@@ -1,24 +1,28 @@
 import { useState, type ChangeEvent } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import "./App.css";
 
 const API = "http://localhost:8000";
 
 type Step = { agent: string; message: string };
 type Evidence = { label: string; text: string; score?: number; url?: string };
+type PlanItem = { q: string; source: "docs" | "web" };
 
 const ICONS: Record<string, string> = {
   planner: "🧭",
   retriever: "🔎",
-  writer: "✍️",
-  critic: "🧐",
   web_researcher: "🌐",
   analyst: "📊",
+  writer: "✍️",
+  critic: "🧐",
 };
 
 export default function App() {
   const [uploadMsg, setUploadMsg] = useState("");
   const [goal, setGoal] = useState("Summarize the skills and work experience");
+  const [plan, setPlan] = useState<PlanItem[] | null>(null);
+  const [planning, setPlanning] = useState(false);
   const [steps, setSteps] = useState<Step[]>([]);
   const [report, setReport] = useState("");
   const [evidence, setEvidence] = useState<Evidence[]>([]);
@@ -44,17 +48,57 @@ export default function App() {
     }
   }
 
-  async function run() {
+  function resetResults() {
     setSteps([]);
     setReport("");
     setEvidence([]);
     setStatus("");
+  }
+
+  async function getPlan() {
+    resetResults();
+    setPlan(null);
+    setPlanning(true);
+    try {
+      const res = await fetch(`${API}/plan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ goal }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setStatus(`Error: ${JSON.stringify(data.detail)}`);
+        return;
+      }
+      setPlan(data.plan);
+    } catch {
+      setStatus("Could not reach the server. Is it running?");
+    } finally {
+      setPlanning(false);
+    }
+  }
+
+  function updateItem(i: number, patch: Partial<PlanItem>) {
+    setPlan((p) => (p ? p.map((it, idx) => (idx === i ? { ...it, ...patch } : it)) : p));
+  }
+  function removeItem(i: number) {
+    setPlan((p) => (p ? p.filter((_, idx) => idx !== i) : p));
+  }
+  function addItem() {
+    setPlan((p) => (p && p.length < 4 ? [...p, { q: "", source: "docs" }] : p));
+  }
+
+  async function run() {
+    if (!plan) return;
+    const approved = plan.filter((p) => p.q.trim().length >= 3);
+    if (approved.length === 0) return;
+    resetResults();
     setRunning(true);
     try {
       const res = await fetch(`${API}/run`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ goal }),
+        body: JSON.stringify({ goal, plan: approved }),
       });
       if (!res.ok || !res.body) {
         setStatus(`Error ${res.status}`);
@@ -92,6 +136,8 @@ export default function App() {
     }
   }
 
+  const busy = running || planning;
+
   return (
     <div className="page">
       <h1>AgentCrew</h1>
@@ -105,11 +151,58 @@ export default function App() {
 
       <section className="card">
         <h2>2. Give the crew a goal</h2>
-        <textarea value={goal} onChange={(e) => setGoal(e.target.value)} rows={3} />
-        <button onClick={run} disabled={running || goal.trim().length < 3}>
-          {running ? "Crew is working..." : "Run crew"}
+        <textarea
+          value={goal}
+          onChange={(e) => {
+            setGoal(e.target.value);
+            setPlan(null);
+          }}
+          rows={3}
+        />
+        <button onClick={getPlan} disabled={busy || goal.trim().length < 3}>
+          {planning ? "Planning..." : "Create plan"}
         </button>
       </section>
+
+      {plan && (
+        <section className="card">
+          <h2>3. Review and approve the plan</h2>
+          {plan.map((item, i) => (
+            <div className="plan-item" key={i}>
+              <input
+                type="text"
+                value={item.q}
+                disabled={running}
+                onChange={(e) => updateItem(i, { q: e.target.value })}
+              />
+              <select
+                value={item.source}
+                disabled={running}
+                onChange={(e) => updateItem(i, { source: e.target.value as "docs" | "web" })}
+              >
+                <option value="docs">documents</option>
+                <option value="web">web</option>
+              </select>
+              <button className="small" disabled={running} onClick={() => removeItem(i)}>
+                ✕
+              </button>
+            </div>
+          ))}
+          <div className="row">
+            {plan.length < 4 && (
+              <button className="small" disabled={running} onClick={addItem}>
+                + Add question
+              </button>
+            )}
+            <button
+              onClick={run}
+              disabled={running || plan.every((p) => p.q.trim().length < 3)}
+            >
+              {running ? "Crew is working..." : "Approve & run"}
+            </button>
+          </div>
+        </section>
+      )}
 
       {steps.length > 0 && (
         <section className="card">
@@ -133,7 +226,7 @@ export default function App() {
       {report && (
         <section className="card">
           <h2>Report</h2>
-          <ReactMarkdown>{report}</ReactMarkdown>
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{report}</ReactMarkdown>
         </section>
       )}
 
@@ -142,18 +235,19 @@ export default function App() {
           <h2>Sources</h2>
           {evidence.map((e, i) => (
             <details key={i}>
-             <summary>
-              {e.label}
-              {e.score !== undefined ? ` (score ${e.score})` : ""}
-            </summary>
-            {e.url && (
-             <p>
-               <a href={e.url} target="_blank" rel="noreferrer">{e.url}</a>
-             </p>
-            
-          )}
-          <p className="snippet">{e.text}</p>
-         </details>
+              <summary>
+                {e.label}
+                {e.score !== undefined ? ` (score ${e.score})` : ""}
+              </summary>
+              {e.url && (
+                <p>
+                  <a href={e.url} target="_blank" rel="noreferrer">
+                    {e.url}
+                  </a>
+                </p>
+              )}
+              <p className="snippet">{e.text}</p>
+            </details>
           ))}
         </section>
       )}
