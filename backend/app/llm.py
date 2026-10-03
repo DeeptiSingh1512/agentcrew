@@ -1,4 +1,6 @@
+import threading
 import time
+
 from google import genai
 
 from app.config import GEMINI_API_KEY, GEMINI_MODEL
@@ -9,9 +11,35 @@ _client = None
 FALLBACK_MODELS = ["gemini-flash-latest", "gemini-3.5-flash", "gemini-3.1-flash-lite"]
 TRANSIENT = ("503", "429", "500", "UNAVAILABLE", "RESOURCE_EXHAUSTED", "overloaded")
 
+# Guardrail: maximum model calls in one crew run
+MAX_CALLS_PER_RUN = 12
+_lock = threading.Lock()
+_calls = 0
+
+
+class BudgetExceeded(RuntimeError):
+    pass
+
+
+def reset_budget():
+    global _calls
+    with _lock:
+        _calls = 0
+
+
+def _spend():
+    global _calls
+    with _lock:
+        _calls += 1
+        if _calls > MAX_CALLS_PER_RUN:
+            raise BudgetExceeded(
+                f"Stopped: this run needed more than {MAX_CALLS_PER_RUN} model calls"
+            )
+
 
 def generate(prompt: str, attempts_per_model: int = 3) -> str:
     global _client
+    _spend()
     if _client is None:
         _client = genai.Client(api_key=GEMINI_API_KEY)
 

@@ -1,14 +1,23 @@
 import uuid
+
 import pymupdf
 from fastembed import TextEmbedding
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct
+from qdrant_client.models import (
+    Distance,
+    FieldCondition,
+    Filter,
+    FilterSelector,
+    MatchValue,
+    PointStruct,
+    VectorParams,
+)
 
 from app.config import QDRANT_PATH
 
 COLLECTION = "documents"
-CHUNK_SIZE = 1500   # characters per chunk
-OVERLAP = 200       # characters shared between chunks
+CHUNK_SIZE = 1500  # characters per chunk
+OVERLAP = 200  # characters shared between chunks
 
 _embedder = None
 _client = None
@@ -34,6 +43,7 @@ def get_client():
 
 
 def close_client():
+    """Close the Qdrant client cleanly (used on server shutdown)."""
     global _client
     if _client is not None:
         _client.close()
@@ -60,6 +70,18 @@ def chunk_text(text):
     return chunks
 
 
+def delete_file(filename: str):
+    """Remove all stored chunks of a file, so re-uploading replaces it."""
+    get_client().delete(
+        COLLECTION,
+        points_selector=FilterSelector(
+            filter=Filter(
+                must=[FieldCondition(key="file", match=MatchValue(value=filename))]
+            )
+        ),
+    )
+
+
 def ingest_pdf(path, filename):
     """Extract, chunk, embed, and store a PDF. Returns the number of chunks."""
     texts, metas = [], []
@@ -76,5 +98,6 @@ def ingest_pdf(path, filename):
         PointStruct(id=str(uuid.uuid4()), vector=vec, payload=meta)
         for vec, meta in zip(vectors, metas)
     ]
+    delete_file(filename)  # re-uploading the same file replaces the old chunks
     get_client().upsert(COLLECTION, points)
     return len(points)

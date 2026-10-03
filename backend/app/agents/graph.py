@@ -4,7 +4,7 @@ from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from app.llm import generate
+from app.llm import generate, reset_budget
 from app.tools.retriever import search
 from app.tools.web import web_search
 
@@ -267,11 +267,13 @@ def _initial(goal: str, plan=None):
 
 
 def run(goal: str, plan=None):
+    reset_budget()
     return build_graph().invoke(_initial(goal, plan))
 
 
 def stream_run(goal: str, plan=None):
     """Yield (agent_name, state_update) as each agent finishes."""
+    reset_budget()
     for update in build_graph().stream(_initial(goal, plan), stream_mode="updates"):
         for node, delta in update.items():
             yield node, delta
