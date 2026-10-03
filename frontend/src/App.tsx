@@ -5,13 +5,15 @@ import "./App.css";
 const API = "http://localhost:8000";
 
 type Step = { agent: string; message: string };
-type Evidence = { file: string; page: number; text: string; score: number };
+type Evidence = { label: string; text: string; score?: number; url?: string };
 
 const ICONS: Record<string, string> = {
   planner: "🧭",
   retriever: "🔎",
   writer: "✍️",
   critic: "🧐",
+  web_researcher: "🌐",
+  analyst: "📊",
 };
 
 export default function App() {
@@ -116,7 +118,7 @@ export default function App() {
             {steps.map((s, i) => (
               <li key={i}>
                 <span className="agent">
-                  {ICONS[s.agent] ?? "🤖"} {s.agent}
+                  {ICONS[s.agent] ?? "🤖"} {s.agent.replace("_", " ")}
                 </span>
                 <span className="msg">{s.message}</span>
               </li>
@@ -140,11 +142,18 @@ export default function App() {
           <h2>Sources</h2>
           {evidence.map((e, i) => (
             <details key={i}>
-              <summary>
-                {e.file} p.{e.page} (score {e.score})
-              </summary>
-              <p className="snippet">{e.text}</p>
-            </details>
+             <summary>
+              {e.label}
+              {e.score !== undefined ? ` (score ${e.score})` : ""}
+            </summary>
+            {e.url && (
+             <p>
+               <a href={e.url} target="_blank" rel="noreferrer">{e.url}</a>
+             </p>
+            
+          )}
+          <p className="snippet">{e.text}</p>
+         </details>
           ))}
         </section>
       )}
