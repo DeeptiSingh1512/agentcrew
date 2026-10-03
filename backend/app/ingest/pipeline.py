@@ -33,6 +33,13 @@ def get_client():
     return _client
 
 
+def close_client():
+    global _client
+    if _client is not None:
+        _client.close()
+        _client = None
+
+
 def extract_pages(path):
     """Return a list of (page_number, text) for a PDF."""
     doc = pymupdf.open(path)
