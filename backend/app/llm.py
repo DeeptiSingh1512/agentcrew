@@ -66,3 +66,6 @@ def generate(prompt: str, rounds: int = 2, attempts_per_model: int = 2) -> str:
         if r < rounds - 1:
             time.sleep(20)  # everything was busy: wait, then try the whole list again
     raise RuntimeError(f"Gemini call failed on all models: {last}")
+
+def calls_used():
+    return _calls

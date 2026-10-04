@@ -1,0 +1,16 @@
+[
+  {"question": "Which company did the candidate work at as a Technical Trainee?", "answerable": true, "must_include": ["Matriye"]},
+  {"question": "At which company did the candidate do a software development internship in 2024?", "answerable": true, "must_include": ["FCG"]},
+  {"question": "Which workflow automation tools does the candidate list?", "answerable": true, "must_include": ["n8n", "Zapier"]},
+  {"question": "Which CRM system did the candidate use for data entry and cleaning?", "answerable": true, "must_include": ["Zoho"]},
+  {"question": "Which programming languages are listed in the skills?", "answerable": true, "must_include": ["Python", "SQL", "Java"]},
+  {"question": "Which databases does the candidate list?", "answerable": true, "must_include": ["MongoDB", "SQL Server"]},
+  {"question": "Which project is a B2B platform for pharmacies?", "answerable": true, "must_include": ["Pharmacy"]},
+  {"question": "What is the candidate currently learning through self-study?", "answerable": true, "must_include": ["SAP"]},
+  {"question": "Which web frameworks or libraries does the candidate list?", "answerable": true, "must_include": ["React", "Node"]},
+  {"question": "Which machine learning libraries are listed?", "answerable": true, "must_include": ["scikit-learn", "Pandas"]},
+  {"question": "What is the candidate's current salary expectation?", "answerable": false, "must_include": []},
+  {"question": "What was the title of the candidate's PhD thesis?", "answerable": false, "must_include": []},
+  {"question": "How many years of Kubernetes experience does the candidate have?", "answerable": false, "must_include": []},
+  {"question": "What is the capital of France?", "answerable": false, "must_include": []}
+]
